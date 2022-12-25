@@ -1,0 +1,57 @@
+library(shiny) 
+library(vroom)
+library(tidyverse)
+library(ggplot2)
+library(maps)
+library(htmlwidgets)
+library(plotly)
+Soil<- vroom::vroom("Soil.csv")
+jpn <- map_data("world", region = "Japan")
+Method <- setNames(Soil$Method, Soil$Method)
+
+ui<- fluidPage(
+  fluidRow(
+    column(4,
+           selectInput("Method", "Method",
+                       choices = unique(Method)))),
+  
+  mainPanel( 
+    h1=("Fukushima Nuclear Radiation"),
+    plotOutput("Out1"),
+    plotlyOutput("x")
+  ))
+#<<server
+server<- function(input, output, session){
+  selected <- reactive(Soil %>% filter(Method == input$Method))
+  output$Out1<- renderPlot({
+    selected() %>%
+      ggplot() +
+      geom_polygon(jpn, mapping = aes(long , lat, group=group),
+                   fill = "white", color = "black")+
+      coord_map() +
+      scale_x_continuous(limits = c(120,150))+
+      scale_y_continuous(limits = c(20,45))+
+      geom_point(data = selected(), mapping = aes(x= Long, y = Lat,colour = Nuclide),size = 0.5)
+  })
+  output$x <- renderPlotly({
+    fig <- selected() 
+    fig <- fig %>%
+      plot_ly(
+        lat = ~selected()$Lat,
+        lon = ~selected()$Long,
+        type = "scattermapbox",
+        marker = list(color = "red")) 
+    fig <- fig %>%
+        layout(mapbox= list(
+             style = "white-bg",
+             zoom = 3,
+             center = list(long = 123 ,lat= 37),
+             layers = list(list(
+                 below = 'traces',
+                 sourcetype = "raster",
+                 source = list("https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}")))))
+    
+    fig
+  })
+}
+shinyApp(ui, server)
